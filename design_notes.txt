@@ -1,0 +1,316 @@
+================================================================================
+BEAVER'S CHOICE PAPER COMPANY — MULTI-AGENT SYSTEM REPORT
+================================================================================
+
+This document satisfies Steps 1, 2, 3, 4, and 6 of the project instructions.
+
+
+================================================================================
+STEP 1 — AGENT WORKFLOW DIAGRAM
+================================================================================
+
+Visual diagrams provided:
+  - workflow_diagram.png  (PNG for submission)
+  - workflow_diagram.mmd    (Mermaid source, editable in Diagrams.net)
+
+SEQUENCE OF OPERATIONS
+----------------------
+1. Customer sends a text inquiry (items, quantities, delivery deadline, request date).
+2. Orchestrator Agent receives the request and extracts dates/deadlines.
+3. Inventory Agent:
+     a. Maps informal item names to exact catalog names
+     b. Checks stock via get_stock_level / get_all_inventory
+     c. Places supplier restock orders via create_transaction when stock is low
+     d. Returns parsed items JSON for downstream agents
+4. Quoting Agent:
+     a. Searches historical quotes via search_quote_history
+     b. Calculates line-item pricing with tiered bulk discounts
+     c. Returns a customer-friendly quote explanation
+5. Sales Agent:
+     a. Verifies fulfillment feasibility against current stock
+     b. Estimates delivery using get_supplier_delivery_date
+     c. Finalizes the sale via create_transaction (sales type)
+     d. Reports updated financial status via generate_financial_report
+6. Orchestrator assembles all agent outputs into one customer response.
+
+AGENT SUMMARY (4 agents + orchestrator = 5 maximum)
+----------------------------------------------------
+| Agent          | Responsibility                                      |
+|----------------|-----------------------------------------------------|
+| Orchestrator   | Route requests, coordinate agent sequence           |
+| Inventory      | Stock queries, reorder decisions, supplier orders   |
+| Quoting        | Historical pricing, bulk discounts, quote generation  |
+| Sales          | Order fulfillment, delivery timelines, transactions |
+
+
+================================================================================
+STEP 2 — STARTER CODE FUNCTION REVIEW
+================================================================================
+
+Each helper function in project_starter.py and its role in the system:
+
+init_database(db_engine, seed=137)
+  Creates SQLite tables (transactions, quote_requests, quotes, inventory),
+  loads CSV data, seeds initial cash ($50,000) and stock order transactions.
+  Called once at the start of run_test_scenarios().
+
+generate_sample_inventory(paper_supplies, coverage=0.4, seed=137)
+  Randomly selects 40% of catalog items and assigns stock quantities (200–800)
+  and minimum reorder thresholds (50–150). Used internally by init_database.
+
+create_transaction(item_name, transaction_type, quantity, price, date)
+  Inserts a row into the transactions table. Types: 'stock_orders' (purchases
+  that reduce cash) or 'sales' (revenue that reduces inventory). Used by
+  place_restock_order and finalize_sale tools.
+
+get_all_inventory(as_of_date)
+  Returns a dict of {item_name: stock} for all items with positive stock as of
+  a given date, computed from net transactions. Used by get_inventory_snapshot.
+
+get_stock_level(item_name, as_of_date)
+  Returns current stock for one item as of a date. Used by check_items_availability,
+  auto_restock_if_needed, and finalize_sale.
+
+get_supplier_delivery_date(input_date_str, quantity)
+  Estimates supplier delivery lead time: same-day (≤10), 1 day (≤100),
+  4 days (≤1000), 7 days (>1000). Used by place_restock_order,
+  estimate_delivery_date, and auto_restock_if_needed.
+
+get_cash_balance(as_of_date)
+  Computes net cash (total sales revenue minus total stock purchase costs).
+  Used internally by place_restock_order to verify reorder affordability.
+
+generate_financial_report(as_of_date)
+  Produces cash balance, inventory valuation, total assets, itemized inventory
+  summary, and top-selling products. Used by get_financial_status tool and
+  run_test_scenarios() for progress tracking.
+
+search_quote_history(search_terms, limit=5)
+  Joins quotes with quote_requests and searches by keyword in request text
+  and quote explanations. Used by search_historical_quotes tool.
+
+
+TOOL-TO-HELPER MAPPING (updated from Step 1 draft)
+----------------------------------------------------
+| Agent Tool                  | Starter Helper Function(s)        |
+|-----------------------------|-----------------------------------|
+| get_inventory_snapshot      | get_all_inventory                 |
+| check_items_availability    | get_stock_level                   |
+| place_restock_order         | create_transaction, get_cash_balance, get_supplier_delivery_date |
+| auto_restock_if_needed      | get_stock_level, place_restock_order |
+| search_historical_quotes    | search_quote_history              |
+| calculate_quote             | paper_supplies catalog prices     |
+| estimate_delivery_date      | get_supplier_delivery_date        |
+| finalize_sale               | create_transaction, get_stock_level |
+| get_financial_status        | generate_financial_report         |
+
+
+================================================================================
+STEP 3 — FRAMEWORK SELECTION: smolagents
+================================================================================
+
+Chosen framework: smolagents (Hugging Face)
+
+Rationale:
+  - Used throughout the Udacity course demos and exercises
+  - ToolCallingAgent pattern maps cleanly to worker-agent specialization
+  - @tool decorator integrates Python functions as agent tools with JSON schema
+  - OpenAIServerModel supports Vocareum proxy (api_base configuration)
+  - Lightweight orchestration without heavy infrastructure
+
+Configuration:
+  model_id  = "gpt-4o-mini"
+  api_base  = "https://openai.vocareum.com/v1"
+  api_key   = UDACITY_OPENAI_API_KEY (from .env)
+
+
+================================================================================
+STEP 4 — IMPLEMENTATION DETAILS
+================================================================================
+
+File: project_starter.py (single submission file)
+
+OrchestratorAgent.handle_request() runs a 3-phase pipeline:
+  Phase 1 → InventoryAgent  (stock check + restock)
+  Phase 2 → QuotingAgent    (historical lookup + pricing)
+  Phase 3 → SalesAgent      (fulfillment + transaction recording)
+
+Key design decisions:
+  - Item alias resolution (_resolve_item_name) bridges informal customer
+    language ("A4 glossy paper") to exact DB names ("Glossy paper")
+  - Tiered bulk discounts encourage larger orders (5%–15% by volume)
+  - auto_restock_if_needed triggers before quoting so large orders can be
+    accommodated when cash allows
+  - Sales agent checks delivery feasibility before recording transactions
+  - Request dates are always passed to tools to maintain temporal accuracy
+
+
+================================================================================
+STEP 5 & 6 — TEST EVALUATION AND REFLECTION
+================================================================================
+
+Test dataset: quote_requests_sample.csv (20 customer requests, Apr 1–17 2025)
+
+Run command: python project_starter.py
+Output file: test_results.csv
+
+--- EVALUATION SUMMARY (from test_results.csv — 20 requests processed) ---
+
+Financial trajectory (Apr 1 → Apr 17, 2025):
+  Starting cash:      $45,059.70
+  Final cash:         $43,366.45
+  Final inventory:    $ 5,368.55
+  Final total assets: $48,735.00
+
+All 20 sample requests in quote_requests_sample.csv were processed without
+runtime errors. Representative outcomes:
+
+| Req | Date       | Quote    | Outcome                                              |
+|-----|------------|----------|------------------------------------------------------|
+|  1  | 2025-04-01 |  $66.00  | Sale completed — ceremony supplies, 5% bulk discount |
+|  2  | 2025-04-03 | $129.00  | Sale completed — balloons flagged unavailable         |
+|  3  | 2025-04-04 | $1,207   | Large conference order fulfilled with 15% discount   |
+|  7  | 2025-04-07 | $576.00  | Exhibition order — restock triggered, sale completed |
+| 15  | 2025-04-12 | $850.00  | Cardboard unavailable; available items sold            |
+| 18  | 2025-04-14 | $135.00  | Partial failure — cardstock out of stock (0 units)   |
+| 19  | 2025-04-15 | $738.00  | Deadline missed — delivery Apr 22 vs requested Apr 20  |
+| 20  | 2025-04-17 | $2,338   | Large concert order — flyers/posters/tickets sold    |
+
+Observed behaviors:
+  - Bulk discounts applied correctly (5%–15% based on order volume)
+  - Inventory agent triggered restock orders when stock was LOW
+  - Quoting agent referenced historical patterns and provided itemized breakdowns
+  - Sales agent blocked or warned on unfulfillable items (cardstock shortage, deadline)
+  - Cash balance fluctuated with both sales revenue and supplier restock costs
+
+STRENGTHS
+---------
+1. Modular agent design — each agent has focused tools and clear responsibilities
+2. Database-backed decisions — stock, cash, and quotes come from real SQLite queries
+3. Bulk discount strategy — tiered pricing encourages larger orders and matches
+   historical quote patterns in quotes.csv
+4. Automatic restocking — inventory agent proactively orders from suppliers when
+   stock is insufficient, using get_supplier_delivery_date for lead times
+5. Item alias mapping — handles common customer phrasing without DB errors
+6. Temporal accuracy — all queries use the request date, not today's date
+
+AREAS FOR IMPROVEMENT
+---------------------
+1. Item name parsing relies on LLM + alias table; items not in catalog (e.g.,
+   "A3 paper", "balloons", "tickets") cannot be fulfilled — a dedicated
+   parsing agent or NER model would improve extraction accuracy
+2. Sequential agent calls (3 LLM round-trips per request) are slow and costly;
+   a single orchestrator with all tools could reduce latency and API budget
+3. Restock orders are recorded immediately but supplier delivery may miss the
+   customer's deadline — the system should more strictly block finalize_sale
+   when get_supplier_delivery_date exceeds the requested delivery date
+4. Quote totals are parsed from free-text agent output; structured JSON output
+   from the quoting agent would eliminate parsing errors
+5. No persistent conversation memory — repeat customers are treated independently
+
+SUGGESTED FUTURE IMPROVEMENTS
+------------------------------
+1. Add structured output (Pydantic models) for parsed items and quote totals
+2. Implement deadline-aware fulfillment gate that compares supplier delivery
+   date vs. customer deadline before allowing finalize_sale
+3. Add a lightweight regex/LLM pre-processor to extract line items before
+   agent delegation, reducing tool-call errors
+4. Cache historical quote searches for similar event types (ceremony, parade)
+5. Add inventory forecasting based on upcoming request patterns in quote_requests.csv
+6. Parallelize independent tool calls within each agent phase
+
+
+================================================================================
+RUBRIC COMPLIANCE — DETAILED MAPPING
+================================================================================
+
+AGENT WORKFLOW DIAGRAM
+----------------------
+[x] All agents shown (4 workers + 1 orchestrator = 5 maximum)
+[x] Non-overlapping responsibilities:
+      Orchestrator = routing only | Inventory = stock/reorder |
+      Quoting = pricing/discounts | Sales = fulfillment/transactions
+[x] Orchestration flow: Customer → Orchestrator → 3 workers → DB → Orchestrator → Customer
+[x] Tools shown per agent with helper function mapping (see workflow_diagram.png)
+[x] Data flow arrows show read/write between agents, tools, and SQLite database
+
+MULTI-AGENT SYSTEM IMPLEMENTATION
+----------------------------------
+[x] Implementation matches diagram (OrchestratorAgent + 3 ToolCallingAgents)
+[x] Framework: smolagents with @tool decorators and OpenAIServerModel
+[x] All 7 required helper functions used in tool definitions:
+      create_transaction          → place_restock_order, finalize_sale
+      get_all_inventory           → get_inventory_snapshot
+      get_stock_level             → check_items_availability, auto_restock_if_needed, finalize_sale
+      get_supplier_delivery_date  → place_restock_order, estimate_delivery_date
+      get_cash_balance            → place_restock_order (affordability check before reorder)
+      generate_financial_report   → get_financial_status
+      search_quote_history        → search_historical_quotes
+
+EVALUATION AND REFLECTION
+-------------------------
+[x] Full quote_requests_sample.csv evaluated (20 requests)
+[x] Results in test_results.csv
+
+Cash balance changes (requirement: ≥3):
+  Request 1:  $45,089.70 (after first sale)
+  Request 2:  $44,949.70 (changed — poster/streamer sale + restock costs)
+  Request 3:  $43,570.50 (changed — large conference order)
+  Request 7:  $44,244.20 (changed — restock + exhibition sale)
+  ... (cash changes on nearly every request due to sales and restock transactions)
+
+Successfully fulfilled orders (requirement: ≥3):
+  Request 1:  "Sale completed" — $66 ceremony order with 5% bulk discount
+  Request 5:  "order has been successfully placed" — $122 party supplies
+  Request 7:  "order has been successfully placed and finalized" — $576 exhibition
+  Request 14: "order has been successfully finalized" — $701 performance order
+  Request 20: "order has been finalized" — $2,338 concert order
+
+Unfulfilled or partially fulfilled (requirement: not all fulfilled, with reasons):
+  Request 2:  Balloons not in catalog — sale completed for available items only
+  Request 15: Cardboard unavailable — partial fulfillment of paper items
+  Request 18: Cardstock out of stock (0 units, short 500) — order NOT finalized
+  Request 19: Delivery deadline missed (Apr 22 estimated vs Apr 20 requested)
+
+ARCHITECTURE DECISION-MAKING (why this design?)
+------------------------------------------------
+1. Chose sequential orchestration over parallel because each phase depends on
+   the prior: inventory status informs quoting, quotes inform sales decisions.
+2. Separated Quoting from Sales so pricing logic (discounts, history) does not
+   mix with transaction recording — single responsibility per agent.
+3. Put reorder logic in Inventory Agent (not Sales) because restocking is a
+   supply-chain decision that must happen before fulfillment is attempted.
+4. Used smolagents ToolCallingAgent because course materials demonstrate this
+   pattern and it maps cleanly to tool → helper function wrappers.
+5. Wrapped all 7 starter helpers as tools rather than calling them directly from
+   agents, ensuring auditable database interactions and rubric compliance.
+
+INDUSTRY BEST PRACTICES — CUSTOMER-FACING OUTPUTS
+--------------------------------------------------
+[x] Responses include itemized quote breakdowns with quantities and unit prices
+[x] Bulk discount rationale provided (e.g., "Bulk discount (10%): -$13.50")
+[x] Delivery dates stated explicitly (e.g., "delivered by April 15, 2025")
+[x] Unfulfillment explained clearly (e.g., "cardstock out of stock", "deadline
+    cannot be met", "balloons not in our catalog")
+[x] Internal data limited to transaction-relevant financial status; no profit
+    margins or raw error stack traces exposed to customers
+
+CODE QUALITY
+------------
+[x] snake_case functions/variables, PascalCase classes (OrchestratorAgent, etc.)
+[x] Docstrings on all @tool functions with Args sections (smolagents requirement)
+[x] Modular sections: DB helpers → tools → agent classes → orchestrator → test runner
+[x] Helper functions (_resolve_item_name, _parse_quote_total) extracted for clarity
+
+
+================================================================================
+SUBMISSION CHECKLIST
+================================================================================
+
+ [x] workflow_diagram.png       — agent flow diagram
+ [x] workflow_diagram.mmd         — editable Mermaid source
+ [x] project_starter.py           — complete implementation
+ [x] design_notes.txt              — this reflective report
+ [x] test_results.csv              — generated by python project_starter.py
+
+================================================================================
