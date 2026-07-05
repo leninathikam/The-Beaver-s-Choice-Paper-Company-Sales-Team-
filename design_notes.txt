@@ -112,7 +112,7 @@ STEP 3 — FRAMEWORK SELECTION: smolagents
 Chosen framework: smolagents (Hugging Face)
 
 Rationale:
-  - Used throughout the Udacity course demos and exercises
+  - Matches the project's existing agent-tool pattern
   - ToolCallingAgent pattern maps cleanly to worker-agent specialization
   - @tool decorator integrates Python functions as agent tools with JSON schema
   - OpenAIServerModel supports Vocareum proxy (api_base configuration)
@@ -121,7 +121,7 @@ Rationale:
 Configuration:
   model_id  = "gpt-4o-mini"
   api_base  = "https://openai.vocareum.com/v1"
-  api_key   = UDACITY_OPENAI_API_KEY (from .env)
+  api_key   = OPENAI_API_KEY (from .env)
 
 
 ================================================================================

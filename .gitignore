@@ -3,3 +3,5 @@ munder_difflin.db
 __pycache__/
 *.pyc
 .venv/
+data/runtime/
+outputs/
