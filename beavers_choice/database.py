@@ -27,11 +27,11 @@ def init_database(db_engine: Engine = DB_ENGINE, seed: int = 137) -> Engine:
 
         initial_date = datetime(2025, 1, 1).isoformat()
 
-    quote_requests_df = pd.read_csv(resolve_data_path("quote_requests.csv"))
+        quote_requests_df = pd.read_csv(resolve_data_path("quote_requests.csv"))
         quote_requests_df["id"] = range(1, len(quote_requests_df) + 1)
         quote_requests_df.to_sql("quote_requests", db_engine, if_exists="replace", index=False)
 
-    quotes_df = pd.read_csv(resolve_data_path("quotes.csv"))
+        quotes_df = pd.read_csv(resolve_data_path("quotes.csv"))
         quotes_df["request_id"] = range(1, len(quotes_df) + 1)
         quotes_df["order_date"] = initial_date
 
