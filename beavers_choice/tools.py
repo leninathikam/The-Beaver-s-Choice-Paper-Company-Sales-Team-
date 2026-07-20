@@ -42,7 +42,11 @@ def list_catalog_items() -> str:
 
 @tool
 def get_inventory_snapshot(as_of_date: str) -> str:
-    """Return current stock levels for all in-stock items as of a given date."""
+    """Return current stock levels for all in-stock items as of a given date.
+
+    Args:
+        as_of_date: Inventory date in YYYY-MM-DD format.
+    """
     stock = get_all_inventory(as_of_date)
     if not stock:
         return f"No inventory on hand as of {as_of_date}."
@@ -52,7 +56,12 @@ def get_inventory_snapshot(as_of_date: str) -> str:
 
 @tool
 def check_items_availability(items_json: str, as_of_date: str) -> str:
-    """Check whether requested items are in stock."""
+    """Check whether requested items are in stock.
+
+    Args:
+        items_json: JSON list of objects like [{"item_name":"A4 paper","quantity":200}].
+        as_of_date: Availability date in YYYY-MM-DD format.
+    """
     parsed = parse_line_items(items_json)
     results = []
     reorder_needed = []
@@ -77,7 +86,13 @@ def check_items_availability(items_json: str, as_of_date: str) -> str:
 
 @tool
 def place_restock_order(item_name: str, quantity: int, as_of_date: str) -> str:
-    """Place a supplier stock order when inventory is low."""
+    """Place a supplier stock order when inventory is low.
+
+    Args:
+        item_name: Catalog item name to reorder.
+        quantity: Number of units to order from the supplier.
+        as_of_date: Order date in YYYY-MM-DD format.
+    """
     resolved = resolve_item_name(item_name) or item_name
     unit_price = get_unit_price(resolved)
     if unit_price == 0:
@@ -96,7 +111,12 @@ def place_restock_order(item_name: str, quantity: int, as_of_date: str) -> str:
 
 @tool
 def auto_restock_if_needed(items_json: str, as_of_date: str) -> str:
-    """Automatically reorder items below minimum stock or insufficient for the order."""
+    """Automatically reorder items below minimum stock or insufficient for the order.
+
+    Args:
+        items_json: JSON list of objects like [{"item_name":"A4 paper","quantity":200}].
+        as_of_date: Decision date in YYYY-MM-DD format.
+    """
     parsed = parse_line_items(items_json)
     actions = []
     for entry in parsed:
@@ -119,14 +139,19 @@ def auto_restock_if_needed(items_json: str, as_of_date: str) -> str:
             continue
 
         reorder_qty = max(needed - current, min_level * 2)
-        result = place_restock_order(item_name, reorder_qty, as_of_date)
+        # place_restock_order is a Tool object after @tool decoration
+        result = place_restock_order(item_name=item_name, quantity=reorder_qty, as_of_date=as_of_date)
         actions.append(result)
     return "\n".join(actions) if actions else "All items sufficiently stocked."
 
 
 @tool
 def search_historical_quotes(search_terms: str) -> str:
-    """Search past quotes by keywords to inform pricing strategy."""
+    """Search past quotes by keywords to inform pricing strategy.
+
+    Args:
+        search_terms: Comma-separated keywords to match against historical quotes.
+    """
     terms = [t.strip() for t in search_terms.split(",") if t.strip()]
     if not terms:
         terms = ["paper"]
@@ -141,7 +166,12 @@ def search_historical_quotes(search_terms: str) -> str:
 
 @tool
 def calculate_quote(items_json: str, as_of_date: str) -> str:
-    """Calculate a price quote with bulk discounts."""
+    """Calculate a price quote with bulk discounts.
+
+    Args:
+        items_json: JSON list of objects like [{"item_name":"A4 paper","quantity":200}].
+        as_of_date: Quote date in YYYY-MM-DD format.
+    """
     parsed = parse_line_items(items_json)
     lines = []
     subtotal = 0.0
@@ -174,7 +204,11 @@ def calculate_quote(items_json: str, as_of_date: str) -> str:
 
 @tool
 def get_pricing_for_item(item_name: str) -> str:
-    """Look up the unit price for a specific catalog item."""
+    """Look up the unit price for a specific catalog item.
+
+    Args:
+        item_name: Catalog item name to price.
+    """
     resolved = resolve_item_name(item_name) or item_name
     price = get_unit_price(resolved)
     if price == 0:
@@ -184,7 +218,13 @@ def get_pricing_for_item(item_name: str) -> str:
 
 @tool
 def estimate_delivery_date(total_quantity: int, as_of_date: str, needs_restock: bool) -> str:
-    """Estimate when an order can be delivered to the customer."""
+    """Estimate when an order can be delivered to the customer.
+
+    Args:
+        total_quantity: Total units in the customer order.
+        as_of_date: Request date in YYYY-MM-DD format.
+        needs_restock: Whether a supplier restock is required before delivery.
+    """
     if not needs_restock:
         earliest = as_of_date
     else:
@@ -194,7 +234,13 @@ def estimate_delivery_date(total_quantity: int, as_of_date: str, needs_restock: 
 
 @tool
 def finalize_sale(items_json: str, total_amount: float, as_of_date: str) -> str:
-    """Record sales transactions and deduct inventory for each line item."""
+    """Record sales transactions and deduct inventory for each line item.
+
+    Args:
+        items_json: JSON list of objects like [{"item_name":"A4 paper","quantity":200}].
+        total_amount: Quoted total charged to the customer.
+        as_of_date: Sale date in YYYY-MM-DD format.
+    """
     parsed = parse_line_items(items_json)
     sold_lines = []
     errors = []
@@ -228,7 +274,11 @@ def finalize_sale(items_json: str, total_amount: float, as_of_date: str) -> str:
 
 @tool
 def get_financial_status(as_of_date: str) -> str:
-    """Return cash balance and inventory valuation as of a date."""
+    """Return cash balance and inventory valuation as of a date.
+
+    Args:
+        as_of_date: Report date in YYYY-MM-DD format.
+    """
     report = generate_financial_report(as_of_date)
     return (
         f"Financial status as of {as_of_date}:\n"
