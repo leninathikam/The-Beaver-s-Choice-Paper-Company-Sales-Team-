@@ -9,6 +9,9 @@ from sqlalchemy.sql import text
 from .catalog import generate_sample_inventory, paper_supplies
 from .config import DB_ENGINE, resolve_data_path, RUNTIME_DIR
 
+# Module-level alias used by query helpers (create_transaction, reports, etc.)
+db_engine = DB_ENGINE
+
 
 def init_database(db_engine: Engine = DB_ENGINE, seed: int = 137) -> Engine:
     try:
