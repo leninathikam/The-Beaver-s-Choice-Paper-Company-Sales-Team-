@@ -1,0 +1,7 @@
+streamlit>=1.32.0
+pandas>=2.2.0,<3
+openai>=1.58.1,<2
+SQLAlchemy>=2.0.40,<3
+python-dotenv>=1.0.0
+smolagents[openai]==1.26.0
+matplotlib>=3.8.0
