@@ -1,10 +1,15 @@
 from pathlib import Path
 import os
 
-import dotenv
 from sqlalchemy import create_engine
 
-dotenv.load_dotenv()
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    # Streamlit Cloud can inject secrets without python-dotenv installed.
+    pass
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent

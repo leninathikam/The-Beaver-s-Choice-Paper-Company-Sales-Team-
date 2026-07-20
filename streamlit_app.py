@@ -6,11 +6,9 @@ import os
 from datetime import date
 
 import streamlit as st
-from dotenv import load_dotenv
 
 from beavers_choice.agents import create_orchestrator
 from beavers_choice.catalog import paper_supplies
-from beavers_choice.config import REPO_ROOT
 from beavers_choice.database import generate_financial_report, get_all_inventory, init_database
 
 st.set_page_config(
@@ -27,9 +25,24 @@ SAMPLE_REQUESTS = [
 
 
 def ensure_api_key() -> str | None:
-    load_dotenv(REPO_ROOT / ".env")
-    load_dotenv()
-    key = os.getenv("OPENAI_API_KEY") or os.getenv("UDACITY_OPENAI_API_KEY")
+    # Prefer Streamlit Cloud secrets; fall back to env / optional .env
+    key = None
+    try:
+        key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("UDACITY_OPENAI_API_KEY")
+    except Exception:
+        pass
+
+    if not key:
+        try:
+            from dotenv import load_dotenv
+            from beavers_choice.config import REPO_ROOT
+
+            load_dotenv(REPO_ROOT / ".env")
+            load_dotenv()
+        except ImportError:
+            pass
+        key = os.getenv("OPENAI_API_KEY") or os.getenv("UDACITY_OPENAI_API_KEY")
+
     if key and not os.getenv("OPENAI_API_KEY"):
         os.environ["OPENAI_API_KEY"] = key
     return key
